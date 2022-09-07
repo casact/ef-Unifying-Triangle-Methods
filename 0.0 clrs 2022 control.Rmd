@@ -1,0 +1,91 @@
+---
+title: "Unifying Triangle-Based Actuarial Reserving Methods"
+author: "Rajesh Sahasrabuddhe"
+abstract: This paper presents an approach for combining (or unifying) triangle-based reserving methods. The approach I present expresses the combination of multiple triangle-based methods as a multivariate linear model. I intend this approach to provide a more flexible model with a statistical basis for underlying actuarial assumptions and the selection of the accident year point estimate after consideration of multiple methods.
+date: \today
+output:
+  pdf_document:
+    number_sections: yes
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(PerformanceAnalytics)
+
+```
+
+```{r include=FALSE}
+corr_chart <- function (R, histogram = TRUE, method = c("pearson", "kendall", 
+  "spearman"), ...) 
+{
+  x = checkData(R, method = "matrix")
+  if (missing(method)) 
+    method = method[1]
+  cormeth <- method
+  panel.cor <- function(x, y, digits = 2, prefix = "", use = "pairwise.complete.obs", 
+    method = cormeth, cex.cor, ...) {
+    usr <- par("usr")
+    on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- cor(x, y, use = use, method = method)
+    txt <- format(c(r, 0.123456789), digits = digits)[1]
+    txt <- paste(prefix, txt, sep = "")
+    if (missing(cex.cor)) 
+      cex <- 2
+    test <- cor.test(as.numeric(x), as.numeric(y), method = method)
+    Signif <- symnum(test$p.value, corr = FALSE, na = FALSE, 
+      cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1), symbols = c("***", 
+        "**", "*", ".", " "))
+    text(0.5, 0.5, txt, cex = 1.5)
+    text(0.8, 0.8, Signif, cex = 2, col = 2)
+  }
+  f <- function(t) {
+    dnorm(t, mean = mean(x), sd = sd.xts(x))
+  }
+  dotargs <- list(...)
+  dotargs$method <- NULL
+  rm(method)
+  hist.panel = function(x, ... = NULL) {
+    par(new = TRUE)
+    hist(x, col = "light blue", probability = TRUE, axes = FALSE, 
+      main = "", breaks = "FD")
+    lines(density(x, na.rm = TRUE), col = "red", lwd = 2)
+    rug(x)
+  }
+  if (histogram) 
+    pairs(x, gap = 0, lower.panel = panel.smooth, upper.panel = panel.cor, 
+      diag.panel = hist.panel, ...)
+  else pairs(x, gap = 0, lower.panel = panel.smooth, upper.panel = panel.cor, 
+    ...)
+}
+
+```
+
+
+
+```{r, child=c('0.1 clrs 2022 Section 1.Rmd')}
+```
+
+```{r, child=c('0.2 clrs 2022 Section 2.Rmd')}
+```
+
+```{r, child=c('0.3 clrs 2022 Section 3.Rmd')}
+```
+
+
+# The Final Word
+
+In this paper I demonstrate that triangle-based methods can be expressed as univariate models. This approach offers several improvements relative to current practice.
+
+\begin{description}
+\item[Additional Predictors] Triangle-based methods are linear models with different predictors. That is, we can effectively use "predictors" and "method" interchangeably. This recognition then opens the universe of potential predictors (methods).
+\item[Statistical Basis to Combine Estimates] We can then combine the predictors using a multivariate model, which provides a statistical basis to combine the results of various methods rather than judgmental selection.
+\item[Uncertainty Models] Linear models naturally provide uncertainty information. The approach will directly provide the distribution of outcomes.
+\item[Flexibility] The combination of methods doesn't occur in the final selection of ultimate but also to the predictions at earlier ages. As such, this approach recognizes that different methods may be better predictors of incremental claims within the triangle. Current approaches assume that the same predictor is optimal at all ages.
+\end{description}
+
+Unfortunately, the publicly-available example data in this paper did not offer the most interesting implementation of this model. Please contact the author if you have an example dataset that would provide an opportunity to further this research.
+
+## Acknowledgement
+I thank Ryan Royce and Francis (Frank) Costanzo for their thoughtful and timely reviews of drafts of this paper. I also thank them for their patience. Any errors that remain in this paper are the responsibility of the author.

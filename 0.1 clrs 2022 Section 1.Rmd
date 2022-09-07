@@ -1,0 +1,91 @@
+# Introduction
+
+Actuarial reserving of property-casualty exposures commonly relies on triangle-based methods. The two most common methods for actuarial reserving are the chain-ladder and Bornhuetter-Ferguson (B-F) methods.
+
+Actuaries will commonly develop projections using multiple triangle-based projection methods. These multiple methods offer competing projections of ultimate claims that the actuary will (implicitly or explicitly) weight to establish a single "selected" estimate.
+
+In this paper, I attempt to address the following shortcomings of this approach.
+
+\begin{description}
+\item[Selection of ultimate claims] There are no approaches in common use for the weighting of competing indications. I presented an approach in \href{https://www.casact.org/abstract/applying-credibility-concepts-develop-weights-ultimate-claim-estimators}{\textit{Applying Credibility Concepts to Develop Weights for Ultimate Claim Estimators}}. The approach in that paper requires additional analysis to implement, and I have not observed the method in use.
+\item[No direct variance measure] Triangle-based methods provide point estimates. If we considered each method as an independent univariate regression model (as described later in this paper), we would have access to a variance model for that method (in isolation). The multivariate model provides the variance of the \emph{selection}.
+\item[Lack of flexibility] The implementation of a particular triangle-based method assume that it is an appropriate approach to project claims amounts from the current maturity to ultimate. For example, the methods don't allow for the possibility that, for an accident year valued at 12 months, the B-F method is a better predictor of emergence between 12 and 36 months, but that the chain-ladder method is the better predictor after 36 months. 
+\end{description}
+
+There is an important limitation to the approach I present. The model can not be used to extrapolate beyond the end of the triangle. That is, we can use the modeling approach to “square the triangle,” but not to extend of the square to an "ultimate rectangle." Such an extension is beyond the scope of this paper and there are several approaches in the actuarial literature discussing such extensions.
+
+## Past Research
+The idea of using regression models for prediction is not new. For example, "Loss Development Using Credibility" (J Eric Brosius, _CAS Exam Study Note_, 1993) introduces least squares regression as an approach to incorporate credibility. Other research^[for example, "Combining Chain-Ladder and Additive Loss Reserving Methods for Dependent Lines of Business", Michael Merz and Mario V. Wüthrich, _Variance_, 2009, and "Optimal and Additive Loss Reserving for Dependent Lines of Business", Klaus D. Schmidt, _Casualty Actuarial Society E-Forum_, Fall 2006.] identified by the author also refers to the use of multivariate models to combine estimators.  This paper has a slightly different focus than prior work. In particular, my goals for the approach presented in this paper differ from the goals of that research. In addition, I seek to present a practical, rather than theoretical, treatment of the subject.
+
+## Organization
+I intend this paper to be practical. This paper includes all `R` code required to reproduce the results presented. In addition, I will post the `Rmarkdown` files used to create this paper to a repository on the [CAS Github site](https://github.com/casact). The downside is that you will likely need to have a base level of `R` knowledge to fully understand the implementation of the ideas proposed in that paper. Although a detailed discussion of the `R` output is beyond the scope of the paper, I will try to provide high-level interpretations of the results. I also insert comments to describe the purpose of the code that follows. In the `R` code, I avoid using packages (or extensions) except where necessary.
+
+In Section 2, I demonstrate how to express each triangle-based method as a univariate linear model. Those univariate regressions have a common response variable with different explanatory variables (i.e., predictors).
+
+In Section 3, I propose a multivariate linear model to unify these methods. 
+
+Section 4 provides concluding remarks.
+
+## Data
+The worked example in this paper uses the data from Section G of the Institute and Faculty of Actuaries [_Claims Reserving Manual_](https://www.actuaries.org.uk/documents/claims-reserving-manual-volume-1). The scope of this paper does not include consideration of required data adjustments (e.g., Berquist-Sherman adjustments or premium on-leveling), so I assume that the data is internally consistent.
+
+## Notation
+We use the naming convention from the data source with accident years, $a$, numbered, $1, \ldots, 6$ and development ages, $d$, numbered $0, \ldots, 5$.
+
+I use $r_{a, d}$ and $p_{a, d}$ to refer to incremental reported claims and incremental paid claims, respectively, from the $a^{th}$ accident year emerging the $d^{th}$ development interval.  
+
+I use and $e_a$ to refer to exposure (e.g., expected claims, premiums, vehicle-years, payroll) for the $a^{th}$ accident year, and I use $\mathit{elr}_a$ to refer to the expected loss rate for the $a^{th}$ accident year. I use $\mathit{el}_a$ refer to the product of the exposure ($e_a$) and expected loss rate ($\mathit{elr}_a$) for the $a^{th}$ accident year.
+
+I use $\mathit{ldf}_{a, d_0 \rightarrow d_1}$ to refer to the factors relating claim amounts at $d_1$ to claim amounts at $d_0$ for accident year $a$. This factor is analogous to the loss development factor used in the chain-ladder method. The principal difference is that because I am predicting incremental claim amounts, the factor will not include the constant (unity), representing prior period cumulative claims, included in a typical loss development factor. We will refer to the vector of $\mathit{ldf}$s as a loss development pattern.
+
+I use $\mathit{lef}_{a, d_0 \rightarrow d_1}$ to refer to the claims emerging between $d_0$ and $d_1$ for accident year $a$ as a percentage of exposure or expected claims. We note that actuaries do not commonly calculate this factor independently in developing B-F indications but rather use emergence factors implied by the loss development pattern from the chain-ladder method. 
+
+For both the $\mathit{ldf}$ and the $\mathit{lef}$, we initially assume the factor does not differ by accident year and exclude the first subscript. This assumption is common in practice.
+
+
+## R Objects
+We create `paid`, `reptd` and `premium` objects in `R` with the following code:
+
+```{r data, echo=TRUE}
+# Premium
+premium <- c(4486, 5024, 5680, 6590, 7482, 8502)
+
+# Cumulative Paid claims 
+paid <- matrix(c(
+   1001, 1855, 2423, 2988, 3335, 3483,
+   1113, 2103, 2774, 3422, 3844,   NA, 
+   1265, 2433, 3233, 3977,   NA,   NA,
+   1490, 2873, 3880,   NA,   NA,   NA,
+   1725, 3261,   NA,   NA,   NA,   NA,
+   1889,   NA,   NA,   NA,   NA,   NA), nrow = 6, byrow = TRUE)
+
+# Name the dimensions
+dimnames(paid) <- list(a = 1:6, d = 0:5)
+
+# Convert to Incremental Triangle
+paid[, c('1', '2', '3', '4', '5')] <- paid[, c('1', '2', '3', '4', '5')] - 
+  paid[, c('0', '1', '2', '3', '4')]
+
+# Cumulative Reported claims
+rptd <- matrix(c(
+   2777, 3264, 3452, 3594, 3719, 3717,
+   3252, 3804, 3973, 4231, 4319,   NA,
+   3725, 4404, 4779, 4946,   NA,   NA,
+   4521, 5422, 5676,   NA,   NA,   NA,
+   5369, 6142,   NA,   NA,   NA,   NA,
+   5818,   NA,   NA,   NA,   NA,   NA), nrow = 6, byrow = TRUE)
+
+# Name the dimensions
+dimnames(rptd) <- list(a = 1:6, d = 0:5)
+
+# Convert to Incremental Triangle
+rptd[, c('1', '2', '3', '4', '5')] <- rptd[, c('1', '2', '3', '4', '5')] - 
+  rptd[, c('0', '1', '2', '3', '4')]
+
+```
+
+## A Minimal Working Example
+
+Readers will observe that these triangles are "small." That is, there are only five development observations between $d = 0$ and $d = 1$, and fewer for later intervals. Since the number of observations needs to exceed the number of predictors (i.e., methods), we are limited in the \emph{size} of the multivariate models. The worked example in Section 3, uses the proposed multivariate model to predict the three unknown claims amounts at  $d = 1$ and $d = 2$. 
+
+In practice, actuaries analyze significantly larger triangles. Such triangles (i.e., datasets) will allow for the use of additional predictors in the multivariate model. 

@@ -1,0 +1,129 @@
+# Expressing Actuarial Methods as Linear Models
+
+The section provides the foundation for our approach by presenting actuarial methods as linear models. We provide a discussion of the chain-ladder and B-F methods. We discuss other predictors in the final section.
+
+## Chain Ladder
+
+We recognize the prediction of the chain-ladder method has the following form^[I recognize this form lack generality. That is, estimates for later ages require the sum of reported values for all prior ages which is not included in this presentation.]:
+  
+$$ 
+  r_{6, 1} = \mathit{ldf}_{0 \rightarrow 1} \times r_{6, 0}\\
+$$
+  
+In the chain ladder method, actuaries develop estimators for $ldf_{0 \rightarrow 1}$. We should recognize this as an equation in the form $y = mx$ using "slope-intercept" notation. With that recognition, we understand that we can estimate $ldf_{0 \rightarrow 1}$ by fitting the following linear model (without an constant term) to the observed data (i.e., $r_{1\ldots5, 0\ldots1}$):
+  
+```{r}
+r_0 <- rptd[1:5, '0'] # The predictor; claims at age = 0
+r_1 <- rptd[1:5, '1'] # The response; claims at age = 1
+
+
+# Fit a linear model relating the response to the predictor
+# The + 0 instructs r to not include an intercept/constant
+cl_0_1 <- lm(r_1 ~ r_0 + 0)
+
+# Print a summary of the linear model
+summary(cl_0_1)
+coef(cl_0_1)
+```
+
+The `summary` function in the code block provides the results in the output above. Recall that the `reptd` object represents incremental values and, as a result, the fitted coefficient is analogous to the traditional development factor minus 1. The output indicates that the estimator coefficient is `r round(coef(cl_0_1)[1], 5)` and the implied development factor is `r 1 + round(coef(cl_0_1)[1], 5)`. 
+
+This approach also provides metrics to support the evaluation of predictive value. We also observe the _p_-value (which `R` labels `Pr(>|t|)`) is `r round(summary(cl_0_1)$coefficient[4], 4)` demonstrating statistical significance at the commonly used 5% threshold. We also observe that the model explains a significant portion of the variability (i.e., the adjusted R-squared is high at `r round(summary(cl_0_1)$adj.r.squared, 3)`).
+
+The fitted coefficient, $\hat{b}_{\mathit{CL}, 0 \rightarrow 1}$, is an estimator for $ldf_{0 \rightarrow 1}$ and we can use that estimator to predict $r_{6, 1}$. 
+
+
+$$
+  \hat{r}_{6, 1} = \hat{b}_{\mathit{CL}, 0 \rightarrow 1} \times r_{6, 0} + \epsilon
+$$
+
+We can observe the relationship visually in the following figure.
+  
+```{r}
+# Predicted value for r(6,1)
+c_1 <- predict(object = cl_0_1, newdata = data.frame('r_0' = rptd['6', '0']))
+
+# Review the linear model visually
+plot(x = rptd[1:6, '0'], y = c(r_1, c_1), col = c(rep('black', 5), 'red'), 
+     main = 'Chain-Ladder', xlab = 'reported (d = 0)', 
+     ylab = 'reported (d = 1)')
+abline(cl_0_1, col = 'blue') # Plot the fitted model
+
+# The prediction (in red)
+abline(v = rptd['6', '0'], lty = 'dotted', col = 'red')
+abline(h = c_1, lty = 'dotted', col = 'red')
+```
+
+
+## Bornhuetter-Ferguson
+
+Using the same principles, we recognize the prediction of the B-F method has the following form:
+  
+$$ 
+r_{6, 1} = \mathit{lef}_{0 \rightarrow 1} \times \mathit{elr}_{6} \times e_{6}
+$$
+As noted, we assume that exposure is internally consistent and doesn't require an adjustment for exposure trend or on-leveling for rate changes.
+
+In the B-F method, actuaries require an estimator for $\mathit{lef}_{0 \rightarrow 1}$. In practice actuaries use the results of the chain-ladder modeling for this estimator. 
+
+We again recognize that this form is analogous to a linear model without an intercept term. In this model, $\mathit{elr}_{.} \times e_{.}$ is the predictor. Critically for the concepts described in this paper, the response variable is the same as the response variable in the linear model for the chain-ladder method.
+
+Assuming that the expected loss ratio is constant but unknown, we could express the equivalent univariate regression as follows.
+
+$$
+\hat{r_{6, 1}} = \hat{b}_{\mathit{BF}, 0 \rightarrow 1} \times e_{6}
+$$
+In this case, our predictor is the product of the expected claims ratio, $\mathit{elr}$, and the $\mathit{lef}$. We will use this approach for generality. 
+
+If we had a working assumption for the expected claims, then our independent variable would be the product of $\mathit{elr}_{.}$ and $e_{.}$ ,i.e., $el_{.}$, and we would express our prediction as follows.
+
+$$
+\hat{r}_{6, 1} = \hat{b}_{\mathit{BF}, 0 \rightarrow 1} \times el_{6}
+$$
+
+In this case, our estimated regression coefficient would be the estimator of $\mathit{lef}_{\mathit{BF}, 0 \rightarrow 1}$. As with the chain-ladder discussion in the prior section, note that the we are predicting incremental values, so we do not include the "to-date" claim amounts included as an additive term in the B-F formula.
+
+```{r}
+e <- premium[1:5] # predictor
+r_1 <- rptd[1:5, '1'] # response
+
+# Fit the linear model "through the origin"
+bf_0_1 <- lm(r_1 ~ e + 0)
+
+# Print a model summary
+summary(bf_0_1)
+
+```
+
+As with the chain-ladder model, we note that the coefficient is statistically significant $p =$  `r signif(summary(bf_0_1)$coefficient[4], 4)` and the model explains a significant portion of the variability (adjusted R-squared =`r round(summary(bf_0_1)$adj.r.squared, 3)`).
+
+```{r}
+c_1 <- predict(object = bf_0_1, newdata = data.frame('e' = premium[6]))
+plot(x = premium, y = c(r_1, c_1), col = c(rep('black', 5), 'red'), 
+     main = 'Bornhuetter-Ferguson', xlab = 'premiums', ylab = 'reported(d = 1)')
+abline(bf_0_1, col = 'blue')
+
+# The prediction
+abline(v = premium[6], lty = 'dotted', col = 'red')
+abline(h = c_1, lty = 'dotted', col = 'red')
+
+```
+
+
+## New Insight
+Using this approach we no longer need to rely on the anecdotal advantages of stability and responsiveness associated with B-F and chain ladder, respectively. More accurately, the notion that we should use B-F for immature claim cohorts and chain ladder for mature cohorts is no longer necessary as, under the approach presented in this paper, we receive statistical feedback as to the predictive value of each method.
+
+## Additional Predictors
+We can use this concept to expand to other candidate predictors. We provide a discussion of two such candidates below.
+
+\begin{description}
+\item[Paid claims] It is reasonable to assume that future claim reporting may be a function of prior claim payments. In a spreadsheet, the actuary would construct a triangle of ratios of incremental reported claims to prior cumulative paid claims and apply a chain-ladder model to that triangle.
+
+\item[Case reserves] We should recognize that (particularly for classes of business with fast claims reporting), case reserves are often considered predictive for future claims reporting. For this reason, actuaries often assess the reasonableness of estimates using IBNR to case ratios. 
+
+As we add predictors, we should recognize that reported claims are a linear combinations of paid claims and case reserves. As such, we can only use any two of these three metrics in the multivariate model that we introduce in the next section.
+
+\item[Idiopathic additive] We should also appreciate that the reported claim amounts may be idiopathic. That is, they may not be proportional to any specific predictors. In regression, we refer to this idiopathic estimate as the "constant" or "intercept". 
+\end{description}
+
+It is beyond the scope of this paper to list all potential predictors. Rather, it is our goal to introduce the expression of models as univariate regressions. The actuary should recognize several other potential predictors, such as open claim counts or the prior evaluation of ultimate claims. That is the thesis of this research: Once we appreciate that we can express triangle-based methods as linear models, the possibilities become limitless. 

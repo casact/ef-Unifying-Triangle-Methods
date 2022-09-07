@@ -1,0 +1,51 @@
+---
+title: "2022 Reserving Call Paper Proposal"
+author: "Rajesh Sahasrabuddhe"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{=tex}
+\begin{description}
+\item[Paper title] Using Linear Models to Unify Triangle-based Reserving Methods.
+\item[Description of the topic(s) to be addressed] The paper will propose an approach to unify triangle-based reserving methods.
+\item[The approach] Many actuarial reserving methods rely on data organized as a triangle to predict ultimate claim amounts. Actuaries develop estimates using several such methods in a typical unpaid claim analysis.  Each method independently predicts the claim emergence to ultimate. We do not assume that, for example, the B-F method is a better predictor through 36 months and that the chain-ladder method is a better predictor after 36-months.
+
+The actuary combines the predictions of various methods to estimate ultimate claim amounts and, by extension, unpaid claim amounts.  And, actuaries typically "combine" predictions through the the application of weights with an element of professional judgment.
+
+The minimal example (applied to a single increment) of the approach of this paper is as follows:
+
+Assume you have the 12 and 24-month columns, and there’s one missing value at the bottom of the 24-month column that you are trying to predict.
+
+Then define:
+
+$y_{24}$ and $y_{12}$ as the vector of values from the 24 and 12-month columns in an $n$-year triangle
+
+$P$ as the vector of exposures
+ 
+
+And fit the following model:\\
+$(y_{24} - y_{12}) \sim b_1 \times y_{12} + b_2 \times P + b_0$
+
+Which simplifies to:\\
+$y_{24} \sim  b_1 \times y_{12} + b_2 \times P + b_0^{\prime}$ with $y_{12}$ from the LHS being absorbed into the intercept ($b_0$ -> $b_0^{\prime}$).
+ 
+Which you can interpret as the prediction of $y_{24}$ being a linear combination of the development method ($b_1 \times y_{12}$), B-F methods ($b_2 \times P$), and a pure additive model $(b_0^{\prime} - y_{12})$
+ 
+And, you can always add more predictors as long you understand the mathematical relationship. (for example, $b_3 \times case_{12}$)\\
+
+Advantages:
+\begin{itemize}
+\item We consider many methods, but the weights fall out of the model rather than the actuary picking them at the end. 
+\item You have independence between B-F and development as they don’t share the same emergence assumption.
+\item The methdology returns an error distributions.
+\end{itemize}
+
+\item[Survey of existing actuarial literature on the subject] There is extensive literature on triangle-based methods. The author proposed an approach to combine method indication in a paper submitted for a prior Reserve Call Paper Program. The author was unable to identify a paper that addressed this specific issue. 
+
+\end{description}
+```
+

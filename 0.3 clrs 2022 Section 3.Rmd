@@ -1,0 +1,168 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+
+# The Multivariate Model
+In this section, we will present the prediction of reported claim values in the multivariate model.  We demonstrate the approach by first predicting the reported claim value at $(a = 6, d = 1)$: $r_{6, 1}$ using reported development and reported B-F approaches. As a demonstration of the model's flexibility, we then consider approaches that actuaries generally do not consider. That is, we predict incremental reported amounts that are idiopathic and predict incremental reported amounts with \emph{paid claim amounts} as a predictor.  That is, in addition to the idiopathic potential, we have three candidate predictors: reported claims, paid claims and exposures.
+
+An identical approach can also be (and should also be) used to predict paid claim values.
+
+## The Saturated Model
+We can develop and fit a model using all of our candidate predictors. We refer to this as our saturated model. Below we present two saturated models. The first includes an intercept; the second does not^[The `+ 0` at the end of the specification for `full_lm_origin` instructs `R` to fit a model without a constant/intercept, i.e. "through the origin."]. 
+
+```{r}
+r_1 <- rptd[1:5, '1'] # Response
+
+r_0 <- rptd[1:5, '0'] # Predictor
+p_0 <- paid[1:5, '0'] # Predictor
+e <- premium[1:5]     # Predictor
+
+# Saturate model with intercept
+full_lm <- lm(r_1 ~ r_0 + p_0 + e)
+summary(full_lm)
+
+# Saturate model without intercept (i.e., "through the origin")
+full_lm_origin <- lm(r_1 ~ r_0 + p_0 + e + 0)
+summary(full_lm_origin)
+
+```
+
+Interestingly we note the following:
+\begin{itemize}
+\item The model with the intercept has a lower adjusted R-squared than the model without the intercept. In addition, the signs of the coefficients of the model with the intercept are not intuitive. These observations are not surprising, as we should have noted the increasing volumes when examining the data. With that increasing volume, it would be surprising if the intercept (idiopathic) term added predictive value.
+
+\item Although the model without the intercept predicts a significant portion of the variability, none of the predictors is statically significant. This observation is also not terribly surprising since, as with any linear model, the actuary needs to be concerned with the collinearity of predictors. We present a test of that collinearity below.
+
+\end{itemize}
+
+The following code produces a chart to support the analysis of correlations. The charts on the diagonal present distributions of each predictor variable. The charts on the lower left present scatter plots; the upper right blocks present pearson correlation coefficients.
+
+```{r fig.height=3}
+corr_chart(data.frame('r_0' = r_0, 'p_0' = p_0, 
+  'e' = e), cex = 0.7, cex.labels = 0.7)
+```
+
+With the high correlations, we need not proceed further with additional testing. For example, if the correlations were lower, we could use an F-test to compare saturated and reduced models. We recognize that we do not need to use multiple predictors (methods) with this particular dataset. In the next section, we discuss how to proceed to model selection given the results of our testing.
+
+## Model Selection
+Although perhaps not in a wholly satisfying way, this brings us to an inflection point in our journey to predict $r_{6,1}$ with the following conclusions:
+\begin{itemize}
+\item There is no idiopathic development in this triangle due to increasing volumes.
+\item Paid claims, reported claims and exposures are highly correlated. As a result, adding predictors (i.e., additional methods) does not add significant incremental value.
+\end{itemize}
+
+However, the same conditions would apply to a traditional approach - very consistent predictions across methods. Potentially there would be differences between B-F and chain ladder since the loss emergence factors are not calibrated to the predictor. We should appreciate that this approach provides the actuary with an understanding of the basis for that consistency.
+
+We present the summaries of the univariate models^[Note we use the `R` native pipe operator `|>`. With the pipe operator `a |> function()` is the same as `function(a)`.]. 
+
+```{r}
+# B-F
+lm(r_1 ~ e + 0) |> summary ()
+# C- L
+lm(r_1 ~ r_0 + 0) |> summary ()
+# Reported ~ Paid
+lm(r_1 ~ p_0 + 0) |> summary ()
+```
+
+The predictive quality of the models is essentially equivalent. We'd consider all of the models to be reasonable. The B-F model is very marginally better than the others, so we select that model for our prediction of $r_{6,1}$. As noted, a benefit of our approach is that regression output includes (frequentist) measures of standard errors. We now use that property to develop the distribution of $r_{6,1}$.
+
+## Reported Claim Prediction
+
+Now we can use our selected model for prediction. Importantly, the use of linear models allows for the modeling of variability. We present the (simulated) the distribution of $r_{6,1}$ below.
+
+```{r}
+# Mean and standard deviation of the predictors
+mean_r_6_1 <- predict(object = bf_0_1, newdata = data.frame('e' = premium[6]))
+sd_r_6_1 <- summary(bf_0_1)$sigma
+
+# linear models assume normality
+# pipe the result to the hist function to present the distribution
+r_6_1 <- rnorm(n = 1e3, mean = mean_r_6_1, sd = sd_r_6_1) |> 
+  hist(xlab = 'r(6,1)', main = 'Histogram of Predictions')
+
+```
+
+We now have a model for r(6,1) which:
+\begin{itemize}
+\item Considers the predictive value of multiple predictors. 
+\item Directly provides a measure of variability.
+\end{itemize}
+
+## Paid Claim Prediction
+
+For brevity, we do not provide the details of the paid claim prediction. However, since we are aware of the high correlation of the predictors, we can advance directly to a review of the prediction of paid claims.
+
+```{r}
+p_1 <- paid[1:5, '1']
+# B-F
+lm(p_1 ~ e + 0) |> summary ()
+# C- L
+lm(p_1 ~ p_0 + 0) |> summary ()
+# Paid ~ Reported
+lm(p_1 ~ r_0 + 0) |> summary ()
+
+```
+
+Again, we note that all three models are highly predictive. We select the paid chain ladder model as it has the highest R-squared value.
+
+```{r}
+pcl_0_1 <- lm(p_1 ~ p_0 + 0)
+
+mean_p_6_1 <- predict(object = pcl_0_1, newdata = data.frame('p_0' = paid[6, '0']))
+sd_p_6_1 <- summary(pcl_0_1)$sigma
+p_6_1 <- rnorm(n = 1e3, mean = mean_p_6_1, sd = sd_p_6_1) |> 
+  hist(xlab = 'p(6,1)', main = 'Histogram of Incremental Paid Claim Predictions')
+
+```
+
+## The Next Interval
+
+We now turn to predictions of reported and paid claim values at $(a = 5, d = 2)$ and at $(a = 6, d = 2)$. For brevity, we don't repeat the discussion above. However, we should recognize that these predictions will differ from the prediction of $(a = 6, d = 1)$ in important ways.
+
+\begin{itemize}
+\item We have added predictors. That is, we can predict $r_{(6,2)}$ using either cumulative reported $\sum_{i = 0}^{1} r_{6, i}$, or incremental ($r_{(6,0)}$ or $r_{(6,1)}$) reported. We should bear in mind that we can not use $r_{(6,1)}$, $r_{(6,2)}$, and $\sum_{i = 0}^{1} r_{6, i}$ as the cumulative amount is a linear combination of the two incremental values. 
+\item Our predictions of $r_{(6,2)}$ consider our \emph{prediction} of $r_{(6,1)}$. That is, the output of the prior step becomes data in this step.
+\item We now have many more potential predictors than data points. Therefore, testing alternatives against a saturated model with all predictors is not an option. However, if we can eliminate a few predictors in a first step, then we may still be able to pursue this approach.
+\end{itemize}
+
+Below, we present sample `R` code to support the evaluation of alternative predictors. The `R` object `pred_list` is a `list` of  potential predictors. In order, those predictors are reported claims in emergence interval 0, reported claims in emergence interval 1, exposures, cumulative reported claims at the end of interval 1, paid claims in emergence interval 0, paid claims in emergence interval 1, and cumulative paid claims at the end of interval 1. We then instruct `R` to return the $R^2$ value for each model and coefficient information including _p-_ values. The `lapply` function is the `R` version of a loop as it applies the function to each predictor. The function that I defined prints the adjusted R-squared value and the model coefficients.
+
+```{r}
+r_2 <- rptd[1:4, '2']
+
+pred_list <- list('r_0' = rptd[1:4, '0'], 'r_1' = rptd[1:4, '1'], 'e' = e[1:4], 
+  'r_tot' = rptd[1:4, '0'] + rptd[1:4, '1'], 'p_0' = paid[1:4, '0'], 
+  'p_1' = paid[1:4, '1'], 'p_tot' = paid[1:4, '0'] + paid[1:4, '1'])
+
+lapply(X = names(pred_list), FUN = function(predictor){
+  pred <- pred_list[[predictor]]
+  print(predictor)
+  paste('adjusted r-squared =', summary(lm(r_2 ~ pred + 0))$adj.r.squared |> round(4)) |> print()
+
+    summary(lm(r_2 ~ pred + 0))$coefficients |> print()
+  }) |> invisible()
+
+```
+
+Based on this review, we may elect to use a predictor for $r_{(6,2)}$ that is different than we used for $r_{(6,1)}$. We now recognize the flexibility advantage of the approach in this step. For example, we note that the highest $R^2$ value is for the model that uses paid amounts in interval 1 (a type of chain-ladder model) as the predictor. We have a triangle-based model that considers B-F and chain ladder, but this model recognizes that different predictors methods may be optimal in different intervals.
+
+## Uncertainty Modeling
+As noted, we now have a _model_ for our response variable. That is, we can simulate each of the response variables using the fitted model. If we create a decision rule (e.g., "Use the model with the highest adjusted $R^2$.") we can write code to generate the entire lower half of the triangle. The recipe would the code would be as follows.
+
+\begin{enumerate}
+\item Fit candidate models to estimate $r_{(6,1)}$.
+\item Use a decision rule to select from the candidate models.
+\item Simulate a value for $r_{(6,1)}$.
+\item Using that simulated value and the data repeat the process for $r_{(5,2)}$ and $r_{(6,2)}$
+\item Repeat to "square the triangle"
+\end{enumerate}
+
+
+## The Last Interval
+When we reach the last column of data, we could be in one of two positions: (i) the data could be judged to be at (or close to) ultimate, or (ii) there could be development beyond the triangle. 
+
+In our example, we are not yet at ultimate as we observe that reported and paid claims are not equal at $(a = 1, d = 5)$. In this case, we can apply the algorithm described above separately to paid and reported claims. Then we must use approaches beyond the scope of this paper to extend predictions to ultimate.
+
+However, if we had observed that the data were at ultimate at an age within the triangle, then we would not want to estimate both paid and reported claims at that age, as they would be equal. We would fit linear models to the observed ultimate claims (equal to observed paid or reported claims, which would be equal) using whatever predictors we have at our disposal.
